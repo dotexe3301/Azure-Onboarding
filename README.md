@@ -14,4 +14,4 @@ This is inspired by @madebygps list for AZ104, but I implemented it without usin
 - Az Powershell Module
 - Outlook
 
-Check out [\docs]() for detailed steps.
+Check out [\docs](https://github.com/dotexe3301/Azure-Onboarding/tree/main/docs) for detailed steps.
