@@ -1,0 +1,301 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Employee_Onboarding_mail_arrived": {
+                "splitOn": "@triggerBody()?['value']",
+                "metadata": {
+                    "Id::AQMkADAwATM0MDAAMS03NjQ2LWM2ODgALTAwAi0wMAoALgAAAw9BPC79KntGh6XX7B073dEBAEKR-h-OHFFDve7F6EOMcscAAAIBEwAAAA==": "Junk Email"
+                },
+                "type": "ApiConnectionNotification",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['outlook']['connectionId']"
+                        }
+                    },
+                    "fetch": {
+                        "pathTemplate": {
+                            "template": "/v2/Mail/OnNewEmail"
+                        },
+                        "method": "get",
+                        "queries": {
+                            "from": "hrteam@gmail.com",
+                            "importance": "Any",
+                            "fetchOnlyWithAttachment": false,
+                            "includeAttachments": false,
+                            "folderPath": "Id::AQMkADAwATM0MDAAMS03NjQ2LWM2ODgALTAwAi0wMAoALgAAAw9BPC79KntGh6XX7B073dEBAEKR-h-OHFFDve7F6EOMcscAAAIBEwAAAA=="
+                        }
+                    },
+                    "subscribe": {
+                        "body": {
+                            "NotificationUrl": "@listCallbackUrl()"
+                        },
+                        "pathTemplate": {
+                            "template": "/MailSubscriptionPoke/$subscriptions"
+                        },
+                        "method": "post",
+                        "queries": {
+                            "importance": "Any",
+                            "fetchOnlyWithAttachment": false,
+                            "folderPath": "Id::AQMkADAwATM0MDAAMS03NjQ2LWM2ODgALTAwAi0wMAoALgAAAw9BPC79KntGh6XX7B073dEBAEKR-h-OHFFDve7F6EOMcscAAAIBEwAAAA=="
+                        }
+                    }
+                }
+            }
+        },
+        "actions": {
+            "Create_user_and_resource": {
+                "runAfter": {
+                    "Role": [
+                        "Succeeded"
+                    ],
+                    "Name": [
+                        "Succeeded"
+                    ],
+                    "Group": [
+                        "Succeeded"
+                    ],
+                    "Email": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                        }
+                    },
+                    "method": "put",
+                    "body": {
+                        "properties": {
+                            "parameters": {
+                                "groupName": "@variables('Group')",
+                                "DisplayName": "@variables('Name')",
+                                "Role": "@variables('Role')"
+                            }
+                        }
+                    },
+                    "path": "/subscriptions/@{encodeURIComponent('xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')}/resourceGroups/@{encodeURIComponent('rg-onboarding-users')}/providers/Microsoft.Automation/automationAccounts/@{encodeURIComponent('automation')}/jobs",
+                    "queries": {
+                        "x-ms-api-version": "2015-10-31",
+                        "runbookName": "onboarder",
+                        "wait": true
+                    }
+                }
+            },
+            "Email_Body": {
+                "runAfter": {},
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "BodyContent",
+                            "type": "string",
+                            "value": "@{trim(replace(replace(replace(replace(replace(replace(replace(string(triggerBody()?['Body']), '<br>', ''), '<div>', ''), '</div>', ''), '&nbsp;', ''), '\r\n', ''), '\n', ' '), '\r', ' '))}"
+                        }
+                    ]
+                }
+            },
+            "Name": {
+                "runAfter": {
+                    "Email_Body": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Name",
+                            "type": "string",
+                            "value": "@{trim(split(split(variables('BodyContent'), 'Name: ')[1], 'Group:')[0])}"
+                        }
+                    ]
+                }
+            },
+            "Group": {
+                "runAfter": {
+                    "Email_Body": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Group",
+                            "type": "string",
+                            "value": "@{trim(split(split(variables('BodyContent'), 'Group: ')[1], 'Role:')[0])}"
+                        }
+                    ]
+                }
+            },
+            "Role": {
+                "runAfter": {
+                    "Email_Body": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Role",
+                            "type": "string",
+                            "value": "@{trim(split(split(variables('BodyContent'), 'Role: ')[1], 'Email:')[0])}"
+                        }
+                    ]
+                }
+            },
+            "Email": {
+                "runAfter": {
+                    "Email_Body": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Email",
+                            "type": "string",
+                            "value": "@{trim(split(split(split(split(variables('BodyContent'), 'Email: ')[1], 'Date:')[0], '>')[1], '<')[0])}"
+                        }
+                    ]
+                }
+            },
+            "Send_an_email_to_Employee": {
+                "runAfter": {
+                    "USP": [
+                        "Succeeded"
+                    ],
+                    "Password": [
+                        "Succeeded"
+                    ],
+                    "VM": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['outlook']['connectionId']"
+                        }
+                    },
+                    "method": "post",
+                    "body": {
+                        "To": "@variables('Email')",
+                        "Subject": "Onboarding Details",
+                        "Body": "<p class=\"editor-paragraph\">Hello @{variables('Name')},</p><br><p class=\"editor-paragraph\">Following are your details for your work:</p><br><p class=\"editor-paragraph\">@{variables('VM')}</p><p class=\"editor-paragraph\">Password: @{variables('Password')}</p><p class=\"editor-paragraph\">User Principal Name: @{variables('USP')}</p><br><p class=\"editor-paragraph\">Best Regards,</p><p class=\"editor-paragraph\">IT Admin</p>",
+                        "Importance": "Normal"
+                    },
+                    "path": "/v2/Mail"
+                }
+            },
+            "Get_outputs": {
+                "runAfter": {
+                    "Create_user_and_resource": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['azureautomation']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/subscriptions/@{encodeURIComponent('xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')}/resourceGroups/@{encodeURIComponent('rg-onboarding-users')}/providers/Microsoft.Automation/automationAccounts/@{encodeURIComponent('automation')}/jobs/@{encodeURIComponent(body('Create_user_and_resource')?['properties']?['jobId'])}/output",
+                    "queries": {
+                        "x-ms-api-version": "2015-10-31"
+                    }
+                }
+            },
+            "USP": {
+                "runAfter": {
+                    "Get_outputs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "USP",
+                            "type": "string",
+                            "value": "@{trim(split(split(body('Get_outputs'), '\"UserName\": \"')[1], '\"')[0])}"
+                        }
+                    ]
+                }
+            },
+            "VM": {
+                "runAfter": {
+                    "Get_outputs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "VM",
+                            "type": "string",
+                            "value": "@{trim(split(split(body('Get_outputs'), '\"VM\": \"')[1], '\"')[0])}"
+                        }
+                    ]
+                }
+            },
+            "Password": {
+                "runAfter": {
+                    "Get_outputs": [
+                        "Succeeded"
+                    ]
+                },
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Password",
+                            "type": "string",
+                            "value": "@{trim(split(split(body('Get_outputs'), '\"Password\": \"')[1], '\"')[0])}"
+                        }
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "outlook": {
+                    "id": "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/providers/Microsoft.Web/locations/centralindia/managedApis/outlook",
+                    "connectionId": "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/resourceGroups/rg-onboarding-users/providers/Microsoft.Web/connections/outlook",
+                    "connectionName": "outlook"
+                },
+                "azureautomation": {
+                    "id": "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/providers/Microsoft.Web/locations/centralindia/managedApis/azureautomation",
+                    "connectionId": "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/resourceGroups/rg-onboarding-users/providers/Microsoft.Web/connections/azureautomation",
+                    "connectionName": "azureautomation",
+                    "connectionProperties": {
+                        "authentication": {
+                            "type": "ManagedServiceIdentity"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
